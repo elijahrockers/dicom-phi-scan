@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "dicom-phi-agent"
+version = "0.1.0"
+description = "Agentic pipeline for scanning DICOM datasets for PHI using header analysis, OCR, and Claude AI classification"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Elijah Rockers", email = "elijah.rockers@gmail.com"}]
+
+dependencies = [
+    "anthropic>=0.39.0",
+    "pydicom>=2.4.0",
+    "Pillow>=10.0.0",
+    "pytesseract>=0.3.10",
+    "pydantic>=2.0.0",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.27.0",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.3.0",
+]
+
+[project.scripts]
+dicom-phi-scan = "src.cli:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
