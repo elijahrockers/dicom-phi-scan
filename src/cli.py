@@ -13,13 +13,15 @@ def main():
     parser = argparse.ArgumentParser(
         description="DICOM PHI Screening Agent — scan DICOM files for protected health information"
     )
-    parser.add_argument("filepath", nargs="?", default=None, help="Path to a single DICOM file")
-    parser.add_argument("--dir", dest="directory", help="Recursively scan directory for .dcm files")
+    parser.add_argument("filepath", nargs="?", default=None,
+                        help="Path to a single DICOM file")
+    parser.add_argument("--dir", dest="directory",
+                        help="Recursively scan directory for .dcm files")
     parser.add_argument(
         "--mode",
         choices=["agent", "direct"],
-        default="agent",
-        help="Scan mode: 'agent' uses Claude orchestration, 'direct' runs scans sequentially (default: agent)",
+        default="direct",
+        help="Scan mode: 'agent' uses Claude orchestration, 'direct' runs scans sequentially (default: direct)",
     )
     parser.add_argument(
         "--output",
@@ -27,7 +29,8 @@ def main():
         default="summary",
         help="Output format (default: summary)",
     )
-    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose logging")
+    parser.add_argument("-v", "--verbose",
+                        action="store_true", help="Verbose logging")
 
     args = parser.parse_args()
 
@@ -106,7 +109,8 @@ def _run_batch(directory: str, mode: str) -> BatchReport:
                 report = run_direct_scan(filepath, client=client)
             reports.append(report)
             risk = report.risk_level.value.upper()
-            print(f"[{i}/{total}] Scanning {filepath} ... {risk} ({report.total_phi_count} PHI findings)")
+            print(
+                f"[{i}/{total}] Scanning {filepath} ... {risk} ({report.total_phi_count} PHI findings)")
         except Exception as e:
             errors.append(FileError(filepath=filepath, error=str(e)))
             print(f"[{i}/{total}] Scanning {filepath} ... ERROR: {e}")
@@ -169,7 +173,8 @@ def _print_summary(report):
     if report.tag_findings:
         print(f"--- Header Tag Findings ({len(report.tag_findings)}) ---")
         for f in report.tag_findings:
-            print(f"  [{f.severity.value.upper()}] {f.tag} {f.tag_name}: {f.value}")
+            print(f"  [{f.severity.value.upper()}] {
+                  f.tag} {f.tag_name}: {f.value}")
         print()
 
     if report.pixel_findings:
