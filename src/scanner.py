@@ -54,6 +54,13 @@ def scan_file(filepath: str) -> ScanReport:
     if not tag_findings and not pixel_findings:
         recommendations.append("No PHI detected — file appears safe for sharing")
 
+    if high_count > 0:
+        risk_level = Severity.HIGH
+    elif total > 0:
+        risk_level = Severity.MEDIUM
+    else:
+        risk_level = Severity.LOW
+
     return ScanReport(
         filepath=filepath,
         tag_findings=tag_findings,
@@ -61,6 +68,6 @@ def scan_file(filepath: str) -> ScanReport:
         burned_in_annotation_tag_present=bia_present,
         burned_in_annotation_value=bia_value,
         total_phi_count=total,
-        risk_level=Severity.HIGH if high_count > 0 else (Severity.MEDIUM if total > 0 else Severity.LOW),
+        risk_level=risk_level,
         recommendations=recommendations,
     )

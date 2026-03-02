@@ -5,7 +5,7 @@ from unittest.mock import PropertyMock, patch
 import numpy as np
 from pydicom.dataset import Dataset
 
-from src.pixel_scanner import extract_image
+from src.pixel_scanner import extract_image, scan_pixels
 
 
 # --- extract_image tests ---
@@ -69,3 +69,38 @@ def test_extract_image_multiframe():
     img = _extract_with_mock(ds)
     assert img is not None
     assert img.size == (32, 32)
+
+
+# --- scan_pixels confidence tests ---
+
+
+def test_confidence_uses_ocr_value():
+    """scan_pixels should use OCR confidence (0-100) scaled to 0-1, not hardcoded 1.0."""
+    arr = np.full((64, 64), 128, dtype=np.uint8)
+    ds = _ds_with_pixel_array(arr)
+    ocr_results = [
+        {"text": "DOE JANE", "x": 10, "y": 20, "width": 100, "height": 30, "conf": 85},
+        {"text": "MRN-123", "x": 10, "y": 60, "width": 80, "height": 25, "conf": 42},
+    ]
+    with patch.object(type(ds), "pixel_array", new_callable=PropertyMock, return_value=arr):
+        with patch("src.pixel_scanner.run_ocr", return_value=ocr_results):
+            findings = scan_pixels(ds)
+
+    assert len(findings) == 2
+    assert findings[0].confidence == 85 / 100.0
+    assert findings[1].confidence == 42 / 100.0
+
+
+# --- extract_image error handling tests ---
+
+
+def test_extract_image_returns_none_on_runtime_error():
+    """extract_image should return None when pixel_array raises RuntimeError."""
+    ds = Dataset()
+    ds.PixelData = b"\x00"
+    with patch.object(
+        type(ds), "pixel_array", new_callable=PropertyMock,
+        side_effect=RuntimeError("missing codec"),
+    ):
+        result = extract_image(ds)
+    assert result is None

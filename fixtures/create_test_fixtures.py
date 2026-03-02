@@ -6,7 +6,7 @@ entirely synthetic — no real patient information is used.
 
 import numpy as np
 import pydicom
-from pydicom.dataset import Dataset, FileDataset
+from pydicom.dataset import FileDataset
 from pydicom.uid import ExplicitVRLittleEndian, generate_uid
 from PIL import Image, ImageDraw, ImageFont
 import os

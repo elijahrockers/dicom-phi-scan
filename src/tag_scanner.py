@@ -4,10 +4,18 @@ Parses DICOM tags against the HIPAA Safe Harbor de-identification standard
 (18 identifiers) and flags known PHI tags with severity classification.
 """
 
+import re
+
 import pydicom
 from pydicom.dataset import Dataset
 
 from .models import PHITagFinding, Severity
+
+# Common de-identification placeholder values — skip these to avoid false positives.
+DEIDENTIFIED_PATTERNS = re.compile(
+    r"^(ANONYMOUS|ANON[-_]?\d*|DEIDENTIFIED|REMOVED|REDACTED|ANONYMIZED)$",
+    re.IGNORECASE,
+)
 
 # DICOM tags that may contain PHI, mapped to HIPAA category and severity.
 # Based on DICOM PS3.15 Table E.1-1 and HIPAA Safe Harbor 18 identifiers.
@@ -79,10 +87,16 @@ def scan_tags(ds: Dataset) -> list[PHITagFinding]:
     findings: list[PHITagFinding] = []
 
     for (group, elem), (tag_name, hipaa_cat, severity) in PHI_TAGS.items():
+        if hipaa_cat == "Flag":
+            continue  # Flags (e.g., BurnedInAnnotation) are checked separately
         tag = pydicom.tag.Tag(group, elem)
         if tag in ds:
             value = str(ds[tag].value).strip()
-            if value and value.upper() not in ("", "NONE", "UNKNOWN"):
+            if (
+                value
+                and value.upper() not in ("NONE", "UNKNOWN")
+                and not DEIDENTIFIED_PATTERNS.match(value)
+            ):
                 findings.append(
                     PHITagFinding(
                         tag=f"({group:04X},{elem:04X})",

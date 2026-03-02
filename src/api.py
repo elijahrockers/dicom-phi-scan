@@ -1,9 +1,11 @@
 """FastAPI server for DICOM PHI scanning."""
 
+import logging
 import tempfile
 from pathlib import Path
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
+from pydicom.errors import InvalidDicomError
 
 from .scanner import scan_file
 from .models import ScanReport
@@ -31,8 +33,11 @@ async def scan_dicom(
     try:
         report = scan_file(tmp_path)
         return report
-    except Exception as e:
-        raise HTTPException(500, f"Scan failed: {str(e)}")
+    except InvalidDicomError:
+        raise HTTPException(422, "File is not a valid DICOM dataset")
+    except Exception:
+        logging.getLogger(__name__).exception("Scan failed")
+        raise HTTPException(500, "Internal scan error")
     finally:
         Path(tmp_path).unlink(missing_ok=True)
 

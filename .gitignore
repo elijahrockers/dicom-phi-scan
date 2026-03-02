@@ -13,3 +13,4 @@ venv/
 !fixtures/*.dcm
 .ruff_cache/
 .pytest_cache/
+TODO.md

@@ -143,22 +143,20 @@ def _print_batch_summary(batch: BatchReport):
 
 def _print_summary(report):
     """Print a human-readable summary of the scan report."""
-    risk_colors = {"high": "RED", "medium": "YELLOW", "low": "GREEN"}
     risk = report.risk_level.value
 
     print(f"\n{'='*60}")
     print("DICOM PHI Scan Report")
     print(f"{'='*60}")
     print(f"File: {report.filepath}")
-    print(f"Risk Level: [{risk_colors[risk]}] {risk.upper()}")
+    print(f"Risk Level: {risk.upper()}")
     print(f"Total PHI Findings: {report.total_phi_count}")
     print()
 
     if report.tag_findings:
         print(f"--- Header Tag Findings ({len(report.tag_findings)}) ---")
         for f in report.tag_findings:
-            print(f"  [{f.severity.value.upper()}] {
-                  f.tag} {f.tag_name}: {f.value}")
+            print(f"  [{f.severity.value.upper()}] {f.tag} {f.tag_name}: {f.value}")
         print()
 
     if report.pixel_findings:

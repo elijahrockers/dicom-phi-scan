@@ -77,3 +77,13 @@ def test_scan_returns_valid_report(client):
     assert "filepath" in data
     assert "tag_findings" in data
     assert "risk_level" in data
+
+
+def test_scan_invalid_dicom_returns_422(client):
+    """Uploading a .dcm file with garbage content should return 422."""
+    garbage = b"this is not valid DICOM content at all"
+    response = client.post(
+        "/scan",
+        files={"file": ("bad.dcm", io.BytesIO(garbage), "application/octet-stream")},
+    )
+    assert response.status_code == 422

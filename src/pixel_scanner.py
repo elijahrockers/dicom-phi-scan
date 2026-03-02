@@ -15,6 +15,10 @@ from .models import BoundingBox, PixelPHIFinding, Severity
 
 logger = logging.getLogger(__name__)
 
+# Minimum pytesseract confidence (0-100) to accept an OCR result.
+# Below this threshold, detections are treated as noise and discarded.
+MIN_OCR_CONFIDENCE = 30
+
 
 def extract_image(ds: Dataset) -> Image.Image | None:
     """Extract pixel data from a DICOM dataset as a PIL Image.
@@ -26,7 +30,7 @@ def extract_image(ds: Dataset) -> Image.Image | None:
 
     try:
         pixel_array = ds.pixel_array
-    except Exception:
+    except (RuntimeError, NotImplementedError, ValueError):
         logger.warning("Could not decompress pixel data — skipping pixel analysis")
         return None
 
@@ -35,13 +39,7 @@ def extract_image(ds: Dataset) -> Image.Image | None:
     if int(num_frames) > 1 and len(pixel_array.shape) >= 3:
         pixel_array = pixel_array[0]
 
-    # Handle RGB/RGBA (keep as-is for PIL)
-    # Only grayscale needs normalization
-    if len(pixel_array.shape) == 2 or (
-        len(pixel_array.shape) == 3 and pixel_array.shape[2] in (3, 4)
-    ):
-        pass  # 2D grayscale or RGB/RGBA — valid for PIL
-
+    # 2D grayscale and RGB/RGBA arrays are valid for PIL as-is.
     # Normalize to 8-bit for OCR
     pmin, pmax = pixel_array.min(), pixel_array.max()
     if pmax > 255:
@@ -66,7 +64,7 @@ def run_ocr(image: Image.Image) -> list[dict]:
     for i in range(n_boxes):
         text = ocr_data["text"][i].strip()
         conf = int(ocr_data["conf"][i])
-        if text and conf > 30:  # Filter low-confidence noise
+        if text and conf > MIN_OCR_CONFIDENCE:
             results.append(
                 {
                     "text": text,
@@ -112,7 +110,7 @@ def scan_pixels(ds: Dataset) -> list[PixelPHIFinding]:
                     height=ocr_match["height"],
                 ),
                 phi_type="ocr_detected",
-                confidence=1.0,
+                confidence=ocr_match["conf"] / 100.0,
                 severity=Severity.HIGH,
             )
         )

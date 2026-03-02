@@ -1,8 +1,6 @@
 """Tests for DICOM header tag PHI scanner."""
 
-import pydicom
 from pydicom.dataset import Dataset
-from pydicom.uid import ExplicitVRLittleEndian
 
 from src.tag_scanner import scan_tags, get_burned_in_annotation
 from src.models import Severity
@@ -89,6 +87,13 @@ def test_clean_dataset():
         BurnedInAnnotation="NO",
     )
     findings = scan_tags(ds)
-    # ANONYMOUS and ANON-000 are non-empty, so they'll be flagged
-    # In a real scenario, you'd add known anonymization patterns to an allowlist
-    assert len(findings) >= 0  # Basic smoke test
+    # De-identification placeholders should be filtered by the allowlist
+    assert len(findings) == 0
+
+
+def test_deidentified_placeholders():
+    """All common de-identification placeholders should be skipped."""
+    for placeholder in ("ANONYMOUS", "ANON-123", "DEIDENTIFIED", "REMOVED", "REDACTED", "ANONYMIZED"):
+        ds = _make_dataset(PatientName=placeholder)
+        findings = scan_tags(ds)
+        assert len(findings) == 0, f"Placeholder '{placeholder}' should not be flagged"
