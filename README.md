@@ -68,39 +68,20 @@ Detects PHI burned into pixel data (common in ultrasound, CR, secondary capture)
 # Install (editable mode — code changes take effect immediately)
 pip install -e .
 
-# Create test fixtures (synthetic data only)
-python fixtures/create_test_fixtures.py
-
 # Scan a single file (summary to screen, JSON report to file)
-dicom-phi-scan fixtures/test_phi_header.dcm -o report.json
+dicom-phi-scan path/to/file.dcm -o report.json
 
 # Batch scan a directory
-dicom-phi-scan --dir fixtures/ -o results.jsonl
+dicom-phi-scan --dir path/to/dicoms/ -o results.jsonl
 
 # Follow symlinks (e.g. for symlinked dataset subsets)
-dicom-phi-scan --dir TCIA-subset -L -o results.jsonl
+dicom-phi-scan --dir path/to/dicoms/ -L -o results.jsonl
 
 # Limit number of files in batch mode
-dicom-phi-scan --dir TCIA-subset -L -o results.jsonl --limit 50
+dicom-phi-scan --dir path/to/dicoms/ -L -o results.jsonl --limit 50
 
 # Query the JSONL report for HIGH risk files
 jq 'select(.risk_level == "high") | .filepath' results.jsonl
-```
-
-## REST API
-
-```bash
-uvicorn src.api:app --reload
-```
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/scan` | POST | Upload a `.dcm` file, returns a `ScanReport` JSON |
-| `/health` | GET | Health check |
-
-```bash
-curl -X POST http://localhost:8000/scan \
-  -F "file=@fixtures/test_phi_header.dcm"
 ```
 
 ## Python API
@@ -118,46 +99,11 @@ print(report.recommendations)  # list of action items
 
 ```
 src/
-├── api.py             # FastAPI endpoints (POST /scan, GET /health)
 ├── cli.py             # CLI entry point (dicom-phi-scan)
 ├── models.py          # Pydantic models (ScanReport, PHITagFinding, PixelPHIFinding, BatchReport)
 ├── pixel_scanner.py   # Layer 2: OCR pixel text detection
 ├── scanner.py         # Orchestration pipeline
 └── tag_scanner.py     # Layer 1: DICOM header tag analysis
-tests/
-├── test_api.py
-├── test_cli.py
-├── test_pixel_scanner.py
-├── test_scanner.py
-└── test_tag_scanner.py
-scripts/
-├── create_tcia_subset.py   # Create symlinked TCIA subset for benchmarking
-└── smoke_test_midi.py      # Benchmark against TCIA MIDI-B answer key
-fixtures/
-└── create_test_fixtures.py  # Generate synthetic test DICOMs
-```
-
-## Test Data
-
-All test fixtures use **entirely synthetic/fake data**. No real patient information is included anywhere in this repository.
-
-- `test_phi_header.dcm` — Fake PHI in header tags (name, MRN, DOB, institution)
-- `test_phi_pixel.dcm` — Fake PHI burned into pixel data (name, MRN, DOB overlaid on image)
-- `test_clean.dcm` — Properly de-identified file (negative test case)
-
-## Development
-
-```bash
-pip install -e ".[dev]"
-
-# Run tests
-pytest
-
-# Lint
-ruff check .
-
-# Benchmark against TCIA MIDI-B answer key
-python scripts/smoke_test_midi.py --seed 42
 ```
 
 ## Design Decisions
@@ -166,11 +112,11 @@ python scripts/smoke_test_midi.py --seed 42
 - **Flag all OCR text as PHI**: Rather than attempting to classify burned-in text (which risks false negatives), all OCR-detected text is flagged as potential PHI. This conservative approach prioritizes patient privacy.
 - **BurnedInAnnotation tag is checked but not trusted**: This tag is frequently missing or incorrectly set in real-world DICOM data. Pixel analysis still runs when the tag is absent.
 - **Streaming batch output**: Batch scans stream per-file JSONL to disk and accumulate only lightweight stats in memory, avoiding OOM on large datasets.
-- **Synthetic test data**: Real DICOM datasets from TCIA are already de-identified and don't exercise the PHI detection path. Synthetic fixtures with planted fake PHI give controlled, repeatable test cases.
+- **Synthetic test data**: Real DICOM datasets from TCIA are already de-identified and don't exercise the PHI detection path. Synthetic data with planted fake PHI gives controlled, repeatable test cases.
 
 ## Stack
 
-Python · pydicom · Pillow · EasyOCR · Pydantic · FastAPI
+Python · pydicom · Pillow · EasyOCR · Pydantic
 
 ## License
 
