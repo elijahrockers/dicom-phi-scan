@@ -44,6 +44,8 @@ def main():
     parser.add_argument("-L", "--follow-symlinks", dest="follow_symlinks",
                         action="store_true",
                         help="Follow symbolic links when scanning directories")
+    parser.add_argument("--cpu", action="store_true",
+                        help="Force CPU for OCR even if GPU is available")
     parser.add_argument("-v", "--verbose",
                         action="store_true", help="Verbose logging")
 
@@ -64,6 +66,9 @@ def main():
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(levelname)s: %(message)s",
     )
+
+    from .pixel_scanner import init_reader
+    init_reader(gpu=not args.cpu if args.cpu else None)
 
     if args.directory:
         _run_batch(args.directory, args.limit, args.follow_symlinks, args.output_file)

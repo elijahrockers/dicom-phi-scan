@@ -80,6 +80,9 @@ dicom-phi-scan --dir path/to/dicoms/ -L -o results.jsonl
 # Limit number of files in batch mode
 dicom-phi-scan --dir path/to/dicoms/ -L -o results.jsonl --limit 50
 
+# Force CPU for OCR (GPU/CUDA is auto-detected by default)
+dicom-phi-scan path/to/file.dcm -o report.json --cpu
+
 # Query the JSONL report for HIGH risk files
 jq 'select(.risk_level == "high") | .filepath' results.jsonl
 ```
