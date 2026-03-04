@@ -9,11 +9,6 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-import pydicom
-
-from .scanner import scan_file
-from .models import BatchReport, ScanReport
-
 
 def main():
     parser = argparse.ArgumentParser(
@@ -67,7 +62,13 @@ def main():
         format="%(levelname)s: %(message)s",
     )
 
+    global pydicom, scan_file, BatchReport, ScanReport
+
+    import pydicom
+    from .models import BatchReport, ScanReport
     from .pixel_scanner import init_reader
+    from .scanner import scan_file
+
     init_reader(gpu=not args.cpu if args.cpu else None)
 
     if args.directory:
