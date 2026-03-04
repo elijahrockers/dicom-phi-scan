@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dicom-phi-agent"
+name = "dicom-phi-scan"
 version = "0.1.0"
 description = "Two-layer DICOM PHI detection: header tag analysis and OCR pixel inspection"
 readme = "README.md"
@@ -28,7 +28,7 @@ dev = [
 dicom-phi-scan = "src.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["src*"]
+include = ["src"]
 
 [tool.ruff]
 line-length = 100
