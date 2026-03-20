@@ -10,6 +10,10 @@ import os
 import sys
 from collections import defaultdict
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .models import ScanReport
 
 
 def main():
@@ -23,6 +27,11 @@ def main():
             "\n"
             "query the JSONL report:\n"
             "  jq 'select(.risk_level == \"high\") | .filepath' results.jsonl\n"
+            "\n"
+            "exit codes:\n"
+            "  0  all files clean\n"
+            "  1  PHI detected in one or more files\n"
+            "  2  one or more files errored\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -71,14 +80,10 @@ def main():
         format="%(levelname)s: %(message)s",
     )
 
-    global pydicom, scan_file, BatchReport, ScanReport
-
-    import pydicom
-    from .models import BatchReport, ScanReport
     from .pixel_scanner import init_reader
     from .scanner import scan_file
 
-    init_reader(gpu=not args.cpu if args.cpu else None)
+    init_reader(gpu=False if args.cpu else None)
 
     done_paths: set[str] | None = None
     if args.resume:
@@ -88,25 +93,27 @@ def main():
         )
 
     if args.directory:
-        _run_batch(
+        rc = _run_batch(
             args.directory, args.limit, args.follow_symlinks, args.output_file,
             resume=args.resume, done_paths=done_paths,
         )
+        sys.exit(rc)
     else:
         try:
             report = scan_file(args.filepath)
         except FileNotFoundError:
             print(f"Error: File not found: {args.filepath}", file=sys.stderr)
-            sys.exit(1)
+            sys.exit(2)
         except Exception as e:
             print(f"Error: {e}", file=sys.stderr)
-            sys.exit(1)
+            sys.exit(2)
 
         _print_summary(report)
         if args.output_file:
             with open(args.output_file, "w") as f:
                 f.write(report.model_dump_json(indent=2) + "\n")
             print(f"Report written to {args.output_file}")
+        sys.exit(1 if report.has_phi else 0)
 
 
 def _load_done_paths(output_file: str) -> set[str]:
@@ -171,11 +178,16 @@ def _discover_dcm_files(
 
 def _read_modality(filepath: str) -> str:
     """Read modality from DICOM header without loading pixel data."""
+    import pydicom
     try:
         ds = pydicom.dcmread(filepath, stop_before_pixels=True)
         return getattr(ds, "Modality", "UNKNOWN")
     except Exception:
         return "UNKNOWN"
+
+
+GC_INTERVAL = 500
+FLUSH_INTERVAL = 100
 
 
 def _run_batch(
@@ -185,8 +197,14 @@ def _run_batch(
     output_file: str | None = None,
     resume: bool = False,
     done_paths: set[str] | None = None,
-) -> None:
-    """Scan all .dcm files, print summary to screen, optionally write JSONL report."""
+) -> int:
+    """Scan all .dcm files, print summary to screen, optionally write JSONL report.
+
+    Returns exit code: 0 = clean, 1 = PHI found, 2 = errors.
+    """
+    from .models import FileError
+    from .scanner import scan_file
+
     files = _discover_dcm_files(directory, limit, follow_symlinks, done_paths)
     total = len(files)
 
@@ -210,7 +228,7 @@ def _run_batch(
 
     if not files:
         print("\nNothing left to scan.")
-        return
+        return 0
 
     mode = "a" if resume else "w"
     rf = open(output_file, mode) if output_file else None
@@ -227,8 +245,7 @@ def _run_batch(
                 error_list.append((filepath, str(e)))
                 print(f"\n[{i}/{total}] {short_path} -- ERROR: {e}")
                 if rf:
-                    rf.write(json.dumps({"filepath": filepath, "error": str(e)}) + "\n")
-                gc.collect()
+                    rf.write(FileError(filepath=filepath, error=str(e)).model_dump_json() + "\n")
                 continue
 
             # Print per-file findings
@@ -254,7 +271,12 @@ def _run_batch(
                 pixel_text_counts[f.text] += 1
 
             del report
-            gc.collect()
+
+            # Periodic maintenance
+            if i % FLUSH_INTERVAL == 0 and rf:
+                rf.flush()
+            if i % GC_INTERVAL == 0:
+                gc.collect()
     finally:
         if rf:
             rf.close()
@@ -305,37 +327,14 @@ def _run_batch(
     print("=" * 72)
     print()
 
-
-def _print_batch_summary(batch: BatchReport) -> None:
-    """Print a human-readable summary from a BatchReport model.
-
-    Used by JSON-mode callers and tests. The streaming summary path
-    (_run_batch_summary) prints richer output inline.
-    """
-    print(f"\n{'=' * 60}")
-    print("DICOM PHI Batch Scan Summary")
-    print(f"{'=' * 60}")
-    print(f"Directory: {batch.directory}")
-    print(f"Total files scanned: {batch.total_files}")
-    print(f"Files with PHI: {batch.files_with_phi}")
-    print(f"Files clean: {batch.files_clean}")
-    print(f"Files errored: {batch.files_errored}")
-    print()
-    print("Risk Breakdown:")
-    print(f"  HIGH:   {batch.risk_breakdown.get('high', 0)}")
-    print(f"  MEDIUM: {batch.risk_breakdown.get('medium', 0)}")
-    print(f"  LOW:    {batch.risk_breakdown.get('low', 0)}")
-
-    if batch.errors:
-        print()
-        print("Errors:")
-        for err in batch.errors:
-            print(f"  {err.filepath}: {err.error}")
-
-    print(f"{'=' * 60}\n")
+    if files_errored:
+        return 2
+    if files_with_phi:
+        return 1
+    return 0
 
 
-def _print_file_findings(report: ScanReport, index: int, total: int, short_path: str) -> None:
+def _print_file_findings(report: "ScanReport", index: int, total: int, short_path: str) -> None:
     """Print condensed per-file findings during batch scan."""
     phi_count = report.total_phi_count
     risk = report.risk_level.value.upper()

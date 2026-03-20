@@ -4,9 +4,11 @@ Extracts pixel data to images, runs EasyOCR for text with bounding boxes,
 and flags all detected text as potential PHI (burned-in text is inherently suspicious).
 """
 
-import logging
+from __future__ import annotations
 
-import easyocr
+import logging
+from typing import Any
+
 import numpy as np
 from PIL import Image
 from pydicom.dataset import Dataset
@@ -20,7 +22,7 @@ logger = logging.getLogger(__name__)
 MIN_OCR_CONFIDENCE = 0.30
 
 # Lazy singleton EasyOCR reader — avoids reloading ~100MB model per call.
-_reader: easyocr.Reader | None = None
+_reader: Any = None
 _use_gpu: bool | None = None
 
 
@@ -37,10 +39,11 @@ def init_reader(gpu: bool | None = None) -> None:
     else:
         _use_gpu = gpu
     logger.info("EasyOCR using %s", "GPU (CUDA)" if _use_gpu else "CPU")
+    import easyocr
     _reader = easyocr.Reader(["en"], gpu=_use_gpu)
 
 
-def _get_reader() -> easyocr.Reader:
+def _get_reader():
     """Return a shared EasyOCR Reader, creating it on first use."""
     global _reader
     if _reader is None:
@@ -145,7 +148,7 @@ def scan_pixels(ds: Dataset) -> list[PixelPHIFinding]:
                     height=ocr_match["height"],
                 ),
                 phi_type="ocr_detected",
-                confidence=ocr_match["conf"] / 100.0,
+                confidence=round(ocr_match["conf"] / 100.0, 4),
                 severity=Severity.HIGH,
             )
         )

@@ -120,9 +120,3 @@ def get_burned_in_annotation(ds: Dataset) -> tuple[bool, str | None]:
     if tag in ds:
         return True, str(ds[tag].value)
     return False, None
-
-
-def scan_file(filepath: str) -> list[PHITagFinding]:
-    """Convenience function to scan a DICOM file from path."""
-    ds = pydicom.dcmread(filepath, stop_before_pixels=True)
-    return scan_tags(ds)

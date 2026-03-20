@@ -63,14 +63,3 @@ class FileError(BaseModel):
     error: str
 
 
-class BatchReport(BaseModel):
-    """Aggregate report for a batch/directory scan."""
-
-    directory: str
-    total_files: int
-    files_with_phi: int
-    files_clean: int
-    files_errored: int
-    risk_breakdown: dict[str, int]
-    reports: list[ScanReport]
-    errors: list[FileError]
