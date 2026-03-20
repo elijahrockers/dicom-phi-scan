@@ -1,5 +1,7 @@
 """CLI entry point for DICOM PHI scanning."""
 
+from __future__ import annotations
+
 import argparse
 import gc
 import json
@@ -41,6 +43,8 @@ def main():
                         help="Follow symbolic links when scanning directories")
     parser.add_argument("--cpu", action="store_true",
                         help="Force CPU for OCR even if GPU is available")
+    parser.add_argument("--resume", action="store_true",
+                        help="Resume interrupted batch scan; skip files already in output JSONL")
     parser.add_argument("-v", "--verbose",
                         action="store_true", help="Verbose logging")
 
@@ -57,6 +61,11 @@ def main():
         parser.print_help()
         sys.exit(0)
 
+    if args.resume:
+        if not args.directory:
+            print("Error: --resume is only supported in batch mode (--dir)", file=sys.stderr)
+            sys.exit(1)
+
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(levelname)s: %(message)s",
@@ -71,8 +80,18 @@ def main():
 
     init_reader(gpu=not args.cpu if args.cpu else None)
 
+    done_paths: set[str] | None = None
+    if args.resume:
+        done_paths = _load_done_paths(args.output_file)
+        logging.getLogger(__name__).info(
+            "Loaded %d completed paths from %s", len(done_paths), args.output_file,
+        )
+
     if args.directory:
-        _run_batch(args.directory, args.limit, args.follow_symlinks, args.output_file)
+        _run_batch(
+            args.directory, args.limit, args.follow_symlinks, args.output_file,
+            resume=args.resume, done_paths=done_paths,
+        )
     else:
         try:
             report = scan_file(args.filepath)
@@ -90,8 +109,33 @@ def main():
             print(f"Report written to {args.output_file}")
 
 
+def _load_done_paths(output_file: str) -> set[str]:
+    """Read an existing JSONL output and return paths already scanned."""
+    logger = logging.getLogger(__name__)
+    done: set[str] = set()
+    path = Path(output_file)
+    if not path.exists():
+        return done
+    with open(path) as f:
+        for line_no, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+                raw_path = record.get("filepath", "")
+                if raw_path:
+                    done.add(raw_path)
+            except json.JSONDecodeError:
+                logger.warning(
+                    "Skipping corrupted line %d in %s", line_no, output_file,
+                )
+    return done
+
+
 def _discover_dcm_files(
     directory: str, limit: int | None = None, follow_symlinks: bool = False,
+    done_paths: set[str] | None = None,
 ) -> list[str]:
     """Recursively find all .dcm files in a directory."""
     dirpath = Path(directory)
@@ -109,6 +153,15 @@ def _discover_dcm_files(
     if not files:
         print(f"Error: No .dcm files found in {directory}", file=sys.stderr)
         sys.exit(1)
+
+    if done_paths:
+        before = len(files)
+        files = [f for f in files if f not in done_paths]
+        skipped = before - len(files)
+        if skipped:
+            logging.getLogger(__name__).info(
+                "Resuming: skipped %d already-scanned files, %d remaining", skipped, len(files),
+            )
 
     if limit and limit < len(files):
         files = files[:limit]
@@ -130,9 +183,11 @@ def _run_batch(
     limit: int | None = None,
     follow_symlinks: bool = False,
     output_file: str | None = None,
+    resume: bool = False,
+    done_paths: set[str] | None = None,
 ) -> None:
     """Scan all .dcm files, print summary to screen, optionally write JSONL report."""
-    files = _discover_dcm_files(directory, limit, follow_symlinks)
+    files = _discover_dcm_files(directory, limit, follow_symlinks, done_paths)
     total = len(files)
 
     print(f"\nScanning {total} files in {directory} ...")
@@ -153,7 +208,12 @@ def _run_batch(
     modality_counts: defaultdict[str, int] = defaultdict(int)
     modality_phi: defaultdict[str, int] = defaultdict(int)
 
-    rf = open(output_file, "w") if output_file else None
+    if not files:
+        print("\nNothing left to scan.")
+        return
+
+    mode = "a" if resume else "w"
+    rf = open(output_file, mode) if output_file else None
     try:
         for i, filepath in enumerate(files, 1):
             modality = _read_modality(filepath)

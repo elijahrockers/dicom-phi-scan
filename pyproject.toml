@@ -25,10 +25,10 @@ dev = [
 ]
 
 [project.scripts]
-dicom-phi-scan = "src.cli:main"
+dicom-phi-scan = "dicom_phi_scan.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["src"]
+include = ["dicom_phi_scan"]
 
 [tool.ruff]
 line-length = 100
